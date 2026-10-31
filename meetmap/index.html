@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>MeetMap — meet up, together</title>
+  <link rel="preconnect" href="https://tile.openstreetmap.org" />
+</head>
+<body>
+  <div id="app">
+    <!-- ============ HOME ============ -->
+    <section id="home-screen">
+      <div class="home-card">
+        <div class="brand-row"><span class="brand-dot"></span><h1>MeetMap</h1></div>
+        <p class="tagline">Create a room, share live location <strong>only while you choose to</strong>, pick a meeting point, navigate together.</p>
+
+        <div class="field"><label for="inp-name">Your name</label>
+          <input id="inp-name" maxlength="32" placeholder="e.g. Priyanshu" /></div>
+        <div class="field-row">
+          <div class="field"><label for="inp-emoji">Avatar</label>
+            <div id="emoji-row" class="emoji-row"></div></div>
+          <div class="field"><label for="inp-color">Color</label>
+            <div id="color-row" class="color-row"></div></div>
+        </div>
+
+        <button id="btn-create" class="primary-btn">Create a room</button>
+
+        <div class="divider"><span>or join with a code</span></div>
+        <div class="join-row">
+          <input id="inp-code" maxlength="6" placeholder="ABC123" autocomplete="off" />
+          <button id="btn-join" class="secondary-btn">Join</button>
+        </div>
+
+        <p class="privacy-note">🔒 Location sharing is opt-in per session and stops the instant you pause or leave. Coordinates are stripped on the server the moment sharing pauses.</p>
+      </div>
+    </section>
+
+    <!-- ============ ROOM / MAP ============ -->
+    <section id="room-screen" class="hidden">
+      <div id="map"></div>
+
+      <header class="room-topbar">
+        <button id="btn-leave" class="ghost-btn" title="Leave room">← Leave</button>
+        <div class="room-title-wrap">
+          <div id="room-name" class="room-name">Room</div>
+          <div class="room-meta">
+            <span id="conn-dot" class="conn-dot"></span>
+            <span id="conn-text">connecting…</span>
+            <span class="meta-sep">·</span>
+            <span id="member-count">0 members</span>
+          </div>
+        </div>
+        <button id="btn-invite" class="ghost-btn" title="Copy invite code">Invite</button>
+      </header>
+
+      <button id="btn-recenter" class="fab" title="Recenter on me">◎</button>
+      <button id="btn-dest" class="fab fab-wide" title="Set meeting point at map center">📍 Set meeting point</button>
+
+      <div id="share-banner" class="share-banner sharing-on">
+        <span id="share-text">Sharing live location</span>
+        <button id="btn-share-toggle" class="share-toggle">Pause</button>
+      </div>
+
+      <div id="sheet" class="sheet">
+        <button id="sheet-grip" class="sheet-grip" aria-label="Toggle members panel"></button>
+        <div id="dest-card" class="dest-card hidden">
+          <div class="dest-head">
+            <span class="dest-label">MEETING POINT</span>
+            <button id="btn-dest-clear" class="link-btn">clear</button>
+          </div>
+          <div id="dest-name" class="dest-name">—</div>
+          <div id="dest-eta" class="dest-eta"></div>
+        </div>
+
+        <div class="section-label">Members</div>
+        <div id="member-list" class="member-list"></div>
+
+        <div class="section-label">Quick status</div>
+        <div class="status-row">
+          <button class="status-btn" data-status="arrived">✅ I'm here</button>
+          <button class="status-btn" data-status="late">🐢 Running late</button>
+          <button class="status-btn" data-status="waiting">⏳ Wait for me</button>
+          <button class="status-btn" data-status="clear">Clear</button>
+        </div>
+
+        <div class="section-label">Room chat</div>
+        <div id="chat-log" class="chat-log"></div>
+        <div class="chat-input-row">
+          <input id="inp-chat" maxlength="240" placeholder="Message the room…" />
+          <button id="btn-chat-send" class="secondary-btn">Send</button>
+        </div>
+      </div>
+
+      <div id="toast" class="toast hidden"></div>
+    </section>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

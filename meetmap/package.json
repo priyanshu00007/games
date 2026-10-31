@@ -1,0 +1,23 @@
+{
+  "name": "meetmap",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "server": "node server/index.mjs",
+    "start": "node server/index.mjs",
+    "dev": "vite --port=5179 --strictPort",
+    "test": "node --test test/",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.0",
+    "@fastify/websocket": "^11.0.0",
+    "fastify": "^5.0.0",
+    "maplibre-gl": "^5.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "vite": "^6.3.0"
+  }
+}

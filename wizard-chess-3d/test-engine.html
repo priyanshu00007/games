@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Engine self-test</title>
+  <style>
+    body { font: 13px/1.5 ui-monospace, monospace; background: #101218; color: #d7d3c6; padding: 16px; white-space: pre-wrap; }
+    .ok { color: #7ddc8a; }
+    .bad { color: #ff6b6b; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div id="out">running...</div>
+  <script type="module">
+    import { PERSONALITIES, getPersonality, DEFAULT_PERSONALITY_ID } from './src/chess/personalities.js';
+    import { chooseMove, evaluate, buildPosition, uciOf } from './src/chess/engine.js';
+    import { Chess } from 'chess.js';
+
+    const out = document.getElementById('out');
+    const lines = [];
+    let failures = 0;
+
+    const log = (cls, msg) => {
+      lines.push(`<span class="${cls}">${msg}</span>`);
+      out.innerHTML = lines.join('\n');
+    };
+    const ok = (cond, msg) => {
+      if (cond) log('ok', 'PASS  ' + msg);
+      else { failures++; log('bad', 'FAIL  ' + msg); console.log('[test] FAIL  ' + msg); }
+    };
+
+    function allowedFor(chess) {
+      const set = new Set();
+      for (const m of chess.moves({ verbose: true })) {
+        let u = uciOf(m);
+        if (m.promotion) u = m.from + m.to + 'q';
+        set.add(u);
+      }
+      return set;
+    }
+
+    const FENS = {
+      start: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      italian: 'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4',
+      castle: 'r3k2r/pppppppp/2n5/8/8/2N5/PPPPPPPP/R3K2R w KQkq - 0 1',
+      promote: '8/P6k/8/8/8/8/8/K7 w - - 0 1',
+      check: '4k3/8/8/8/8/8/8/4K2q w - - 0 1',
+      mate1: '6k1/5ppp/8/8/8/8/8/R3K3 w - - 0 1',
+      stalemate: '7k/5Q2/6K1/8/8/8/8/8 b - - 0 1'
+    };
+
+    for (const [name, fen] of Object.entries(FENS)) {
+      const chess = new Chess(fen);
+      ok(chess.fen() === fen, `FEN accepted by chess.js: ${name}`);
+    }
+
+    ok(getPersonality(DEFAULT_PERSONALITY_ID).id === DEFAULT_PERSONALITY_ID, 'default personality resolves');
+    ok(PERSONALITIES.length >= 10, `roster has ${PERSONALITIES.length} opponents (>= 10)`);
+
+    const ids = new Set(PERSONALITIES.map((p) => p.id));
+    ok(ids.size === PERSONALITIES.length, 'personality ids are unique');
+    ok(PERSONALITIES.every((p) => p.name && p.epithet && p.style && p.blurb), 'every persona has copy');
+    ok(!PERSONALITIES.some((p) => /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(JSON.stringify(p))), 'no emoji in persona copy');
+
+    const builtin = PERSONALITIES.filter((p) => p.engine === 'builtin' || p.engine === 'random');
+    ok(builtin.length >= 9, `${builtin.length} in-browser opponents (>= 9)`);
+    ok(PERSONALITIES.some((p) => p.engine === 'stockfish'), 'stockfish opponent present');
+
+    // Weights must actually change the evaluation, otherwise personalities are cosmetic.
+    const probe = new Chess(FENS.italian);
+    const pos = buildPosition(probe);
+    const guardianScore = evaluate(pos, getPersonality('guardian').weights);
+    const berserkerScore = evaluate(pos, getPersonality('berserker').weights);
+    ok(guardianScore !== berserkerScore, `weights change evaluation (${guardianScore} vs ${berserkerScore})`);
+
+    for (const p of builtin) {
+      for (const [name, fen] of Object.entries(FENS)) {
+        const chess = new Chess(fen);
+        const allowed = allowedFor(chess);
+        const expectedNull = name === 'stalemate' || allowed.size === 0;
+        const started = performance.now();
+        const move = chooseMove({ fen, allowed, personality: p, timeBudgetMs: 250 });
+        const took = performance.now() - started;
+
+        if (expectedNull) {
+          ok(move === null, `${p.id}/${name}: no move out of stalemate (got ${move && move.uci})`);
+          continue;
+        }
+        ok(Boolean(move), `${p.id}/${name}: returned a move`);
+        if (!move) continue;
+        ok(allowed.has(move.uci), `${p.id}/${name}: ${move.uci} (${move.san}) is legal & playable`);
+        ok(allowed.has(move.from + move.to + 'q') || allowed.has(move.uci), `${p.id}/${name}: uci matches allowed set`);
+        ok(took <= 700, `${p.id}/${name}: finished in ${Math.round(took)}ms within budget`);
+      }
+    }
+
+    // Mate in one must be found by every builtin engine.
+    for (const p of builtin.filter((x) => x.engine === 'builtin')) {
+      const chess = new Chess(FENS.mate1);
+      const move = chooseMove({ fen: FENS.mate1, allowed: allowedFor(chess), personality: p, timeBudgetMs: 250 });
+      ok(Boolean(move) && move.san.endsWith('#'), `${p.id}: finds mate in one (got ${move && move.san})`);
+    }
+
+    // Promotion must be playable on a board that only allows queen promotion.
+    for (const p of builtin) {
+      const chess = new Chess(FENS.promote);
+      const allowed = new Set(['a7a8q']);
+      const move = chooseMove({ fen: FENS.promote, allowed, personality: p, timeBudgetMs: 150 });
+      ok(Boolean(move) && move.uci === 'a7a8q', `${p.id}: promotes with a7a8q (got ${move && move.uci})`);
+    }
+
+    // Check evasion: whatever comes back must get the king out of check.
+    for (const p of builtin) {
+      const chess = new Chess(FENS.check);
+      const move = chooseMove({ fen: FENS.check, allowed: allowedFor(chess), personality: p, timeBudgetMs: 250 });
+      let legal = false;
+      if (move) {
+        const c2 = new Chess(FENS.check);
+        const applied = c2.move({ from: move.from, to: move.to, promotion: move.promotion || 'q' });
+        legal = Boolean(applied) && !c2.isCheck();
+      }
+      ok(legal, `${p.id}: escapes check with ${move && move.san}`);
+    }
+
+    // Deterministic-ish variety: the opening choice should not be one fixed move forever.
+    const seen = new Set();
+    for (let i = 0; i < 12; i++) {
+      const m = chooseMove({ fen: FENS.start, allowed: allowedFor(new Chess(FENS.start)), personality: getPersonality('novice'), timeBudgetMs: 150 });
+      if (m) seen.add(m.uci);
+    }
+    ok(seen.size >= 3, `novice varies its opening (${seen.size} distinct moves in 12 tries)`);
+
+    console.log('[test] DONE failures=' + failures + ' assertions=' + lines.length);
+    const headline = failures === 0 ? `ALL ENGINE TESTS PASSED (${lines.length} assertions)` : `${failures} FAILURES of ${lines.length}`;
+    log(failures === 0 ? 'ok' : 'bad', '=== ' + headline + ' ===');
+    document.title = failures === 0 ? 'ENGINE-OK' : `ENGINE-FAIL-${failures}`;
+  </script>
+</body>
+</html>
+
+

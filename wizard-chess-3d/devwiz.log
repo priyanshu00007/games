@@ -1,0 +1,18 @@
+
+> wizard-chess-aistudio-applet@1.0.0 predev
+> node -e "require('fs').existsSync('node_modules')||require('child_process').execSync('npm install',{stdio:'inherit'})"
+
+
+> wizard-chess-aistudio-applet@1.0.0 dev
+> vite --port=9000 --host=0.0.0.0
+
+
+  [32m[1mVITE[22m v8.3.4[39m  [2mready in [0m[1m595[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m9000[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.56.1:[1m9000[22m/[39m   [2mEthernet 2[22m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.56.2:[1m9000[22m/[39m   [2mEthernet 3[22m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://10.12.229.235:[1m9000[22m/[39m  [2mWiFi[22m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+[2m11:58:47[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m11:58:47[22m [36m[1m[vite][22m[39m server restarted.

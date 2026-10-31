@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Wizard Chess E2E</title>
+  <style>
+    body { font: 13px/1.5 ui-monospace, monospace; background: #101218; color: #d7d3c6; padding: 16px; white-space: pre-wrap; }
+    .ok { color: #7ddc8a; }
+    .bad { color: #ff6b6b; font-weight: bold; }
+    .info { color: #8fb4ff; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <div id="out">booting...</div>
+  <script type="module">
+    import { createRoot } from 'react-dom/client';
+    import { createElement } from 'react';
+    import App from './src/App.tsx';
+    import './src/styles.css';
+    import { PERSONALITIES, getPersonality } from './src/chess/personalities.js';
+    import { Chess } from 'chess.js';
+
+    const out = document.getElementById('out');
+    const lines = [];
+    let failures = 0;
+    const log = (cls, msg) => {
+      lines.push(`<span class="${cls}">${msg}</span>`);
+      out.innerHTML = lines.join('\n');
+      console.log('[e2e] ' + msg);
+    };
+    const ok = (cond, msg) => (cond ? log('ok', 'PASS  ' + msg) : (failures++, log('bad', 'FAIL  ' + msg)));
+    const info = (msg) => log('info', '... ' + msg);
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    async function until(fn, timeout = 25000, step = 150) {
+      const t0 = Date.now();
+      while (Date.now() - t0 < timeout) {
+        let v = null;
+        try { v = fn(); } catch { v = null; }
+        if (v) return v;
+        await sleep(step);
+      }
+      return null;
+    }
+
+    const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    const wc = () => window.wizardChess;
+    const squareToRC = (s) => ({ r: 8 - Number(s[1]), c: 'abcdefgh'.indexOf(s[0]) });
+
+    createRoot(document.getElementById('root')).render(createElement(App));
+
+    async function run() {
+      // --- boot -------------------------------------------------------------
+      const ready = await until(() => {
+        const w = window.wizardChess;
+        return w && typeof w.getBoardFen === 'function' && typeof w.getOpponentId === 'function' ? w : null;
+      }, 40000);
+      ok(Boolean(ready), 'window.wizardChess bridge is exposed');
+      if (!ready) throw new Error('bridge missing');
+
+      const overlayGone = await until(() => document.getElementById('loading-overlay')?.classList.contains('hidden'), 60000);
+      ok(Boolean(overlayGone), 'loading overlay hidden (assets + parallel piece loads finished)');
+
+      // --- FEN builder ------------------------------------------------------
+      const startFen = wc().getBoardFen();
+      ok(startFen === START, `board rebuilds the start FEN (got "${startFen}")`);
+
+      const legal = wc().getLegalUcis();
+      ok(Array.isArray(legal) && legal.length === 20, `20 opening moves reported (got ${Array.isArray(legal) ? legal.length : 'n/a'})`);
+      ok(legal.includes('e2e4'), 'castling-free opening UCI list includes e2e4');
+
+      let chessJs = null;
+      try {
+        chessJs = new Chess(startFen);
+        ok(true, 'chess.js accepts the rebuilt FEN');
+      } catch (e) {
+        ok(false, 'chess.js accepts the rebuilt FEN: ' + e.message);
+      }
+
+      // --- persona switching ------------------------------------------------
+      let events = 0;
+      window.addEventListener('wizardchess:opponent', () => { events++; });
+      const returned = wc().setOpponent('grandmaster');
+      ok(returned === 'grandmaster', `setOpponent returns applied id (got ${returned})`);
+      ok(wc().getOpponentId() === 'grandmaster', 'getOpponentId reflects the switch');
+      await sleep(50);
+      ok(events >= 1, `opponent-change event dispatched (${events})`);
+      ok(wc().getPersonalities().length === PERSONALITIES.length, 'window API exposes full roster');
+      const badge = document.getElementById('mode-badge')?.textContent || '';
+      ok(badge.includes('Stockfish 19'), `HUD badge names the opponent (got "${badge}")`);
+      ok(!/gemini|google|genai/i.test(document.documentElement.innerHTML), 'no Gemini/Google branding in the page');
+
+      // --- castling rights --------------------------------------------------
+      wc().setupCustomScenario([
+        { type: 'king', color: 'w', r: 7, c: 4, hasMoved: false },
+        { type: 'rook', color: 'w', r: 7, c: 7, hasMoved: false },
+        { type: 'rook', color: 'w', r: 7, c: 0, hasMoved: false },
+        { type: 'king', color: 'b', r: 0, c: 4, hasMoved: true },
+        { type: 'rook', color: 'b', r: 0, c: 7, hasMoved: true }
+      ], 'w');
+      const castleFen = wc().getBoardFen();
+      ok(castleFen === '4k2r/8/8/8/8/8/8/4K2R w KQ - 0 1', `castling rights derived from hasMoved (got "${castleFen}")`);
+
+      wc().setupCustomScenario([
+        { type: 'king', color: 'w', r: 7, c: 4, hasMoved: true },
+        { type: 'rook', color: 'w', r: 7, c: 7, hasMoved: false },
+        { type: 'king', color: 'b', r: 0, c: 4, hasMoved: false },
+        { type: 'rook', color: 'b', r: 0, c: 0, hasMoved: false }
+      ], 'b');
+      ok(wc().getBoardFen() === 'r3k3/8/8/8/8/8/8/4K3 b q - 0 1', `moved king drops white rights (got "${wc().getBoardFen()}")`);
+
+      // --- AI plays a full reply -------------------------------------------
+      wc().resetChessBoard(false);
+      ok(wc().getBoardFen() === START, 'reset restores the start position');
+      wc().setOpponent('strategist');
+
+      const played = wc().executeChessMove(...Object.values(squareToRC('e2')), ...Object.values(squareToRC('e4')));
+      ok(played === true, 'human move e2e4 accepted by executeChessMove');
+
+      const replied = await until(() => {
+        const f = wc().getBoardFen();
+        return f && f !== START && f.split(' ')[1] === 'w' && f.split(' ')[5] === '2' ? f : null;
+      }, 30000, 200);
+      ok(Boolean(replied), `AI answered on the board (got "${replied}")`);
+      if (replied) {
+        try {
+          const after = new Chess(replied);
+          ok(!after.isCheck(), 'AI reply leaves no king in check');
+          const legalAfter = after.moves({ verbose: true });
+          ok(legalAfter.length > 0, `position after AI reply is playable (${legalAfter.length} moves)`);
+        } catch (e) {
+          ok(false, 'position after AI reply parses in chess.js: ' + e.message);
+        }
+        info('strategist reply FEN: ' + replied);
+      }
+
+      // --- promotion is animated and reflected in the FEN --------------------
+      wc().setupCustomScenario([
+        { type: 'king', color: 'w', r: 7, c: 4 },
+        { type: 'king', color: 'b', r: 0, c: 7, hasMoved: true },
+        { type: 'pawn', color: 'b', r: 1, c: 0 }
+      ], 'b');
+      const beforePromo = wc().getBoardFen();
+      ok(beforePromo === '7k/p7/8/8/8/8/8/4K3 b - - 0 1', `promotion setup FEN (got "${beforePromo}")`);
+      const promoLegal = wc().getLegalUcis();
+      ok(promoLegal.includes('a7a8q'), `under-promotion-free UCI exposes a7a8q (got ${JSON.stringify(promoLegal)})`);
+
+      const kicked = wc().triggerAIMoveNow();
+      ok(kicked === true, 'triggerAIMoveNow starts the opponent search');
+      const promoted = await until(() => {
+        const f = wc().getBoardFen();
+        return f && f !== beforePromo ? f : null;
+      }, 30000, 200);
+      ok(Boolean(promoted) && promoted.startsWith('q'), `black pawn promoted to a queen (got "${promoted}")`);
+
+      // --- Stockfish (lazy download + UCI handshake) -------------------------
+      wc().resetChessBoard(false);
+      wc().setOpponent('grandmaster');
+      const sfStart = wc().getBoardFen();
+      wc().executeChessMove(...Object.values(squareToRC('d2')), ...Object.values(squareToRC('d4')));
+      info('waiting for Stockfish WASM to download + search...');
+      const sfReply = await until(() => {
+        const f = wc().getBoardFen();
+        return f && f !== sfStart && f.split(' ')[1] === 'w' && f.split(' ')[5] === '2' ? f : null;
+      }, 60000, 250);
+      ok(Boolean(sfReply), `Stockfish (or its built-in fallback) replied (got "${sfReply}")`);
+      if (sfReply) info('stockfish reply FEN: ' + sfReply);
+
+      // --- persona roster sanity -------------------------------------------
+      ok(PERSONALITIES.length >= 10, `${PERSONALITIES.length} personalities available`);
+      ok(new Set(PERSONALITIES.map((p) => p.id)).size === PERSONALITIES.length, 'ids unique');
+      ok(PERSONALITIES.every((p) => getPersonality(p.id).id === p.id), 'every persona round-trips through getPersonality');
+      ok(PERSONALITIES.filter((p) => p.engine === 'builtin').length >= 8, 'at least 8 in-browser engines');
+
+      const headline = failures === 0 ? 'ALL E2E TESTS PASSED' : `${failures} E2E FAILURES of ${lines.length}`;
+      log(failures === 0 ? 'ok' : 'bad', '=== ' + headline + ' ===');
+      console.log('[e2e] DONE failures=' + failures + ' assertions=' + lines.length);
+      document.title = failures === 0 ? 'E2E-OK' : `E2E-FAIL-${failures}`;
+    }
+
+    run().catch((e) => {
+      failures++;
+      log('bad', 'FAIL  unhandled: ' + (e && e.stack ? e.stack : e));
+      console.log('[e2e] DONE failures=' + failures + ' assertions=' + lines.length);
+      document.title = 'E2E-CRASH';
+    });
+  </script>
+</body>
+</html>
+

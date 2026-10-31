@@ -1,0 +1,29 @@
+{
+  "name": "desk-racer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "predev": "node -e \"require('fs').existsSync('node_modules')||require('child_process').execSync('npm install',{stdio:'inherit'})\"",
+    "dev": "vite --port=3000 --host=0.0.0.0",
+    "prebuild": "node -e \"require('fs').existsSync('node_modules')||require('child_process').execSync('npm install',{stdio:'inherit'})\"",
+    "build": "vite build",
+    "prelint": "node -e \"require('fs').existsSync('node_modules')||require('child_process').execSync('npm install',{stdio:'inherit'})\"",
+    "lint": "tsc --noEmit",
+    "preview": "vite preview --port=3000 --host=0.0.0.0"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "three": "^0.183.2",
+    "vite": "^6.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.183.0",
+    "typescript": "~5.8.2"
+  }
+}
